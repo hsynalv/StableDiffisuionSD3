@@ -4,7 +4,6 @@ FROM nvidia/cuda:12.6.3-cudnn-runtime-ubuntu22.04 AS base
 ARG PYTHON_VERSION=3.11
 ARG PYTORCH_VERSION=2.6.0
 ARG TORCHVISION_VERSION=0.21.0
-ARG CUDA_VERSION=12.6.3
 
 # Set environment variables with optimizations for serverless
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -15,10 +14,17 @@ ENV DEBIAN_FRONTEND=noninteractive \
     CUDA_DEVICE_MAX_CONNECTIONS=1 \
     NVIDIA_VISIBLE_DEVICES=all \
     NVIDIA_DRIVER_CAPABILITIES=compute,utility \
-    # Enable TF32 for faster compute on A100/H100 (safely ignored on older hardware)
+    # Enable TF32 for faster compute on A100/H100
     NVIDIA_TF32_OVERRIDE=1 \
     # Optimize cuDNN for Ampere/Hopper architecture
-    CUDNN_FRONTEND_MEMORY_OPTM_MODE=1
+    CUDNN_FRONTEND_MEMORY_OPTM_MODE=1 \
+    MALLOC_CONF="background_thread:true,metadata_thp:auto" \
+    TCMALLOC_SAMPLE_PARAMETER=4194304 \
+    # More comprehensive preload that handles both lib paths
+    LD_PRELOAD="/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4:/usr/lib/libtcmalloc.so.4" \
+    TCMALLOC_LARGE_ALLOC_REPORT_THRESHOLD=8589934592 \
+    TCMALLOC_RELEASE_RATE=1.0 \
+    TCMALLOC_PAGE_FENCE=0
 
 # Create and set working directory
 WORKDIR /app
@@ -30,22 +36,18 @@ RUN apt-get update && apt-get install -y \
     git \
     wget \
     libgl1 \
-    curl \
     google-perftools \
     && ln -sf /usr/bin/python3.11 /usr/bin/python \
-    && ln -sf /usr/bin/pip3 /usr/bin/pip \
-    && apt-get autoremove -y \
-    && apt-get clean -y \
-    && rm -rf /var/lib/apt/lists/*
+    && ln -sf /usr/bin/pip3 /usr/bin/pip
+
+RUN apt-get autoremove -y && apt-get clean -y && rm -rf /var/lib/apt/lists/*
 
 # Upgrade pip and install Python packages with optimization tools
 RUN pip install --upgrade pip && \
     pip install --no-cache-dir torch==${PYTORCH_VERSION}+cu126 torchvision==${TORCHVISION_VERSION}+cu126 --extra-index-url https://download.pytorch.org/whl/cu126 && \
-    pip install --no-cache-dir accelerate safetensors bitsandbytes
+    pip install --no-cache-dir accelerate safetensors bitsandbytes comfy-cli
 
-# Install ComfyUI latest version (combining commands to reduce layers)
-RUN pip install comfy-cli && \
-    /usr/bin/yes | comfy --workspace /comfyui install --cuda-version ${CUDA_VERSION} --nvidia
+RUN /usr/bin/yes | comfy --workspace /comfyui install --cuda-version 12.6 --nvidia --version 0.3.24
 
 WORKDIR /comfyui
 
@@ -61,7 +63,7 @@ WORKDIR /
 ADD *snapshot*.json /
 
 # Add scripts that for custom node restoration and start.sh
-ADD src/start.sh src/restore_snapshot.sh src/rp_handler.py test_input.json ./
+ADD src/start.sh src/restore_snapshot.sh src/rp_handler.py ./
 RUN chmod +x /start.sh /restore_snapshot.sh
 
 RUN /restore_snapshot.sh
@@ -69,11 +71,9 @@ RUN /restore_snapshot.sh
 # Start container
 CMD ["/start.sh"]
 
-# Use tcmalloc for better memory management
-ENV LD_PRELOAD="/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4"
-
 FROM base as model-downloader
 
+# Set HuggingFace token
 ARG HUGGINGFACE_ACCESS_TOKEN
 
 WORKDIR /comfyui
@@ -96,9 +96,6 @@ FROM base as final
 
 # Copy models from model-downloader stage to the final image
 COPY --from=model-downloader /comfyui/models /comfyui/models
-
-# Set environment variables for RunPod serverless
-ENV LD_PRELOAD="/usr/lib/x86_64-linux-gnu/libtcmalloc.so.4"
 
 # Start container
 CMD ["/start.sh"]
