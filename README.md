@@ -33,9 +33,6 @@ docker build --build-arg HUGGINGFACE_ACCESS_TOKEN=your_token_here -t comfyui-run
 
 ## Environment Variables
 
-- `RUNPOD_SERVERLESS=1`: Enables serverless mode
-- `RUNPOD_USE_WORKER_TIMEOUT=1`: Uses worker timeout
-- `RUNPOD_WORKER_TIMEOUT=30`: Sets worker timeout to 30 seconds
 - `NVIDIA_TF32_OVERRIDE=1`: Enables TF32 precision (for A100/H100)
 
 ## Performance Optimizations
