@@ -1,0 +1,45 @@
+# Byte-compiled / optimized / DLL files
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Distribution / packaging
+dist/
+build/
+*.egg-info/
+
+# Virtual environments
+venv/
+env/
+ENV/
+
+# Docker specific
+.dockerignore
+*.pem
+*.crt
+*.key
+
+# IDE specific files
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS specific files
+.DS_Store
+Thumbs.db
+
+# Logs
+logs/
+*.log
+
+# Downloaded models
+*.safetensors
+*.bin
+*.ckpt
+*.pth
+
+# Large files
+*.tar
+*.tar.gz
+*.zip 
